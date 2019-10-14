@@ -4,16 +4,18 @@ import java.io.*;
 public class Reader {
 
     protected static String[] splitter(String doc){
-        
-        String[] tokens = doc.split("[\\p{Punct}0-9\\s]+"); // splitting for anything that is not alphabetic characters
-        List<String> temp = new ArrayList<String>();
-
-        for (String token: tokens){
-            if (!token.equals("")) temp.add(token);
+        StringTokenizer tokenizer = new StringTokenizer(doc);
+        List<String> content = new ArrayList<String>();
+        while(tokenizer.hasMoreTokens()){
+            String temp = tokenizer.nextToken();
+            String[] a = temp.split("[^A-Za-z]");
+            for(String s: a) {
+                if(!s.equals("")) content.add(s);
+            }
         }
-        String result[] = temp.toArray(new String[temp.size()]);
-        return result;
-
+        Object[] o = content.toArray();
+        String[] tokens = Arrays.copyOf(o, o.length, String[].class);
+        return tokens;
     }
     public static void main(String[] args) throws Exception {
         String test = "'Well ho$2w are you doing\n";
@@ -24,9 +26,8 @@ public class Reader {
         for(String i: tokens){
             System.out.println(i);
         }*/
-
         String[] tokens = splitter(test+test2);
-        for(String i: tokens){
+        for(String i: tokens) {
             System.out.println(i);
         }
    }                                       // end of main
