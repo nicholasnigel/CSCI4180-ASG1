@@ -1,0 +1,184 @@
+
+import java.io.IOException;
+import java.util.*;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.MapWritable;
+import org.apache.hadoop.io.ArrayWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+
+public class NgramInitialCount{
+
+    /**
+     * splitting string with non-alphabetic characters as delimiters
+     * 
+     * @param doc: the content of the document
+     * @return result
+     */
+    protected static String[] splitter(String doc){
+        
+        String[] tokens = doc.split("[\\p{Punct}0-9\\s]+"); // splitting for anything that is not alphabetic characters
+        List<String> temp = new ArrayList<String>();
+
+        for (String token: tokens){
+            if (!token.equals("")) temp.add(token);
+        }
+        String result[] = temp.toArray(new String[temp.size()]);
+        return result;
+
+    }
+
+    /**
+     * Return the initial character of a word in a form of string
+     * @param s
+     * @return
+     */
+    protected static String getInitial(String s){
+        return Character.toString(s.charAt(0));
+    }                                                                               // end of getInitial method
+
+    public static class Map extends Mapper<LongWritable, Text, Text, MapWritable>{
+        private Text word; // as key
+        private MapWritable map; // as value
+
+        protected void setup(Context context) throws IOException, InterruptedException{
+            word = new Text(); // initialization for both word and map
+            map = new MapWritable();
+        }                                                                           // end of setup
+
+        /**
+         * emit key value pair where key: word, value: map that counts the occurence of 
+         * key and other words
+         * @param key
+         * @param value
+         * @param context
+         * @throws IOException
+         * @throws InterruptedException
+         */
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            Configuration conf = context.getConfiguration();
+            int N = Integer.parseInt(conf.get("N"));
+            String[] tokens = splitter(value.toString());
+
+            for(int i=0; i<tokens.length+1-N; i++){
+                map.clear();
+                String w = getInitial(tokens[i]);
+                word.set(w);
+                
+                String neighborstring = new String();   // Ngram neighbors in string type
+                for(int j=i+1; j<i+N; j++){
+                    neighborstring = neighborstring + getInitial(tokens[j]) + " ";
+                }                                                                   // end for loop
+                neighborstring = neighborstring.trim(); 
+                Text neighbortext = new Text(neighborstring);
+
+                // put in map, if it is not there yet put new, else add by 1
+                if(map.containsKey(neighbortext)) {
+                    IntWritable count = (IntWritable) map.get(neighbortext);
+                    count.set(count.get() + 1);     // update the value 
+                }                                                                   // end if
+                else{
+                    map.put(neighbortext, new IntWritable(1));
+                }                                                                   // end else
+
+                context.write(word, map);
+            }                                                                       // end for loop
+
+        }                                                                           // end of map function
+    }                                                                               // end of mapper static class
+
+    public static class Reduce extends Reducer<Text, MapWritable, Text, IntWritable> {
+        private MapWritable finalmap;
+        private Text word;
+
+        protected void setup(Context context) throws IOException, InterruptedException{
+            word = new Text();  
+            finalmap = new MapWritable();                                            // end of setup method
+            
+        }     
+
+        protected void merge(MapWritable other){
+            Set<Writable> keys = other.keySet();
+            for(Writable k: keys) {
+                // if finalmap contains key k, add them else create new one
+                if(finalmap.containsKey(k)){
+                    IntWritable count1 = (IntWritable) finalmap.get(k);
+                    IntWritable count2 = (IntWritable) other.get(k);
+                    count1.set(count1.get() + count2.get());
+                }                                                                   // end of if
+                else{
+                    finalmap.put((Text) k, (IntWritable) other.get(k));
+                }                                                                   // end else
+
+            }                                                                       // end of for loop
+
+        }                                                                           // end of merge method
+        
+                                                                             
+        
+        /**
+         * aggregate all with the same key to reducer and add up all the MapWritable for final map
+         * @param key
+         * @param value
+         * @param context
+         * @throws IOException
+         * @throws InterruptedException
+         */
+        protected void reduce(Text key, Iterable<MapWritable> value, Context context) throws IOException, InterruptedException {
+            finalmap.clear();
+            for(MapWritable v: value) {
+                merge(v);   // merge to finalmap
+            }                                                                       // end of for loop
+            word.set(key);
+            Set<Writable> keys = finalmap.keySet();
+            for(Writable k: keys){
+                String newstring = new String();
+                String rootword = word.toString();
+                String added = ((Text) k).toString();
+                newstring = newstring+rootword+" "+ added;
+                Text newkey = new Text(newstring);
+                IntWritable v = (IntWritable) finalmap.get(k);
+                context.write(newkey,v);
+            }
+
+        }                                                                           // end of reduce method
+        
+        
+    }                                                                               // end of Reducer static class
+
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        conf.set("N", args[2]);
+        conf.set("theta",args[3]);
+        Job job = new Job(conf, "NgramInitialRF");
+        
+        // Input and Output file path
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+                
+        conf.set("mapreduce.textoutputformat.separator", " ");
+
+        job.setJarByClass(NgramInitialCount.class);
+
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(MapWritable.class);
+
+        job.setMapperClass(Map.class);
+        job.setReducerClass(Reduce.class);
+
+        job.setInputFormatClass(TextInputFormat.class);
+        job.setOutputFormatClass(TextOutputFormat.class);
+        
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }                                                                                           // end main
+}
