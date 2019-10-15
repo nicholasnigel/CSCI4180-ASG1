@@ -117,8 +117,9 @@
                     String w = getInitial(tokens[i]);
                     
                     //if(visited.contains(w)) continue;
+                    //visited.add(w);   
                     word.set(w);
-                    //visited.add(w);
+                    
                     /*
                     for(int j=i; j<tokens.length+1-N; j++) {
                         if(getInitial(tokens[j]).equals(w) ) {
@@ -215,14 +216,14 @@
         public static void main(String[] args) throws Exception {
             Configuration conf = new Configuration();
             conf.set("N", args[2]);
-            
+            conf.set("mapreduce.textoutputformat.separator", " ");
             Job job = new Job(conf, "NgramInitialCount");
             
             // Input and Output file path
             FileInputFormat.addInputPath(job, new Path(args[0]));
             FileOutputFormat.setOutputPath(job, new Path(args[1]));
                     
-            conf.set("mapreduce.textoutputformat.separator", " ");
+            
 
             job.setJarByClass(NgramInitialCount.class);
 
