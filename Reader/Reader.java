@@ -3,33 +3,40 @@ import java.io.*;
 
 public class Reader {
 
-    protected static String[] splitter(String doc){
-        StringTokenizer tokenizer = new StringTokenizer(doc);
-        List<String> content = new ArrayList<String>();
-        while(tokenizer.hasMoreTokens()){
-            String temp = tokenizer.nextToken();
-            String[] a = temp.split("[^A-Za-z]");
-            for(String s: a) {
-                if(!s.equals("")) content.add(s);
-            }
-        }
-        Object[] o = content.toArray();
-        String[] tokens = Arrays.copyOf(o, o.length, String[].class);
-        return tokens;
+    protected String getInitial(String x) {
+        return Character.toString(x.charAt(0));
     }
+
+    protected static String getNeighbors(String[] tokens, int start, int N){
+        String result = new String();   
+        start = start+1;
+        int end = tokens.length-1; // last index
+        int i=0; // number of neighbors
+        while(i!=N-1){
+            // if empty and last element return null                    
+            if(tokens[start].isEmpty()){
+                if(start == end) return null; // if empty and the end, return null
+                start++;
+                continue;
+            }
+            result = result + tokens[start] + " ";
+            start++;
+            i++;
+        }                                                                       // end of while loop
+        return result.trim();
+
+    }  
     public static void main(String[] args) throws Exception {
         String test = "'Well ho$2w are you doing\n";
         String test2 = "im doing fine";
 
-        /*
-        String[] tokens =  (test+test2).split("\\P{Alpha}+");
-        for(String i: tokens){
-            System.out.println(i);
-        }*/
-        String[] tokens = splitter(test+test2);
-        for(String i: tokens) {
-            System.out.println(i);
-        }
+        List<String> ls = new ArrayList<String>();
+        ls.add("wow");
+        ls.add("are");
+        ls.add("you");
+        System.out.println(ls.get(0));
+        ls.remove(0);
+        System.out.println(ls.get(0));
    }                                       // end of main
 
 }                                           // end of reader

@@ -37,7 +37,7 @@
             return result;
 
         }
-
+        
         protected static String[] splitter2(String doc){
             StringTokenizer tokenizer = new StringTokenizer(doc);
             List<String> content = new ArrayList<String>();
@@ -65,6 +65,7 @@
             private Text word; // as key
             private MapWritable map; // as value
             private List<String> visited; // list of visited alphabet characters
+            
 
             protected void setup(Context context) throws IOException, InterruptedException{
                 word = new Text(); // initialization for both word and map
@@ -72,28 +73,31 @@
                 visited = new ArrayList<String>();
             }                                                                           // end of setup
             /**
-             * getting the next N characters
+             * getting the next N characters after tokens at index start
              * @param tokens
              * @param start
              * @param N
              * @return
              */
             protected String getNeighbors(String[] tokens, int start, int N){
-                String result = new String();
-                for(int i=start+1; i<start+N; i++){
-                    result = result + getInitial(tokens[i]) + " ";
-                }                                                                       // end for
-                result = result.trim();
-                return result;
-            }                                                                           // end of getNeighbors method
+                String result = new String();   
+                start = start+1;
+                int end = tokens.length-1; // last index
+                int i=0; // number of neighbors
+                while(i!=N-1){
+                    // if empty and last element return null                    
+                    if(tokens[start].isEmpty()){
+                        if(start == end) return null; // if empty and the end, return null
+                        start++;
+                        continue;
+                    }
+                    result = result + getInitial(tokens[start]) + " ";
+                    start++;
+                    i++;
+                }                                                                       // end of while loop
+                return result.trim();
 
-            protected Object[] removeEmpty(String[] tokens) {
-                List<String> r = new ArrayList<String>();
-                for(String i: tokens){
-                if(!i.equals("")) r.add(i);
-                }
-                return r.toArray();
-            }                                                                           // end of removeEmpty
+            }                                                                           // end of getNeighbors method        
 
             /**
              * emit key value pair where key: word, value: map that counts the occurence of 
@@ -107,49 +111,37 @@
             public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
                 Configuration conf = context.getConfiguration();
                 int N = Integer.parseInt(conf.get("N"));
-                String[] tokens = splitter2(value.toString());
-                //String[] t = value.toString().split("[^A-Za-z]");
-                //Object[] t1 = removeEmpty(t);
-                //String[] tokens = Arrays.copyOf(t1, t1.length, String[].class);
+                String content = value.toString();
+                String[] tokens = content.split("[^A-Za-z]");
+                
 
-                for(int i=0; i<tokens.length+1-N; i++){
+                for(int i = 0; i < tokens.length; i++){
                     map.clear();
-                    String w = getInitial(tokens[i]);
-                    if(tokens[i].isEmpty()) continue;
-                    //if(visited.contains(w)) continue;
-                    //visited.add(w);   
-                    word.set(w);
-                    
-                    /*
-                    for(int j=i; j<tokens.length+1-N; j++) {
-                        if(getInitial(tokens[j]).equals(w) ) {
-                            String neighborstring = getNeighbors(tokens, j, N);
-                            Text neighbortext = new Text(neighborstring);
-                            if(map.containsKey(neighbortext)){
-                                IntWritable count = (IntWritable) map.get(neighbortext);
-                                count.set(count.get() + 1);
-                            }
-                            else map.put(neighbortext, new IntWritable(1));
-                            
-                        }
-                    }
-                    context.write(word, map);
-                    */
-                    
-                    String neighborstring = getNeighbors(tokens, i, N);
-                    Text neighbortext = new Text(neighborstring);
+                    if(tokens[i].isEmpty()) continue; // skip empty string ""
+                    visited.add(getInitial(tokens[i]));
+                    if(visited.size()<N) continue;
 
-                    // put in map, if it is not there yet put new, else add by 1
-                    if(map.containsKey(neighbortext)) {
+                    // emit here
+                    String[] s = visited.toArray(new String[0]);
+                    word.set(s[0]);
+                    String neighbor = new String();
+                    
+                    for(int j = 1; j < s.length; j++){
+                        neighbor += s[j] + " ";
+                    }
+                    neighbor = neighbor.trim();
+                    Text neighbortext = new Text(neighbor);
+
+                    if(map.containsKey(neighbortext)){
                         IntWritable count = (IntWritable) map.get(neighbortext);
-                        count.set(count.get() + 1);     // update the value 
-                    }                                                                   // end if
+                        count.set(count.get() + 1);
+                    }
                     else{
                         map.put(neighbortext, new IntWritable(1));
-                    }                                                                   // end else
-
+                    }
                     context.write(word, map);
-                }                                                                       // end for loop
+                    visited.remove(0); // dequeue
+                }                                                                       // end for
 
             }                                                                           // end of map function
         }                                                                               // end of mapper static class
