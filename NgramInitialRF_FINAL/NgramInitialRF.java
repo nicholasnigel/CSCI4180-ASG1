@@ -3,6 +3,7 @@ import java.util.*;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.MapWritable;
@@ -16,7 +17,7 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
-public class NgramInitialCount {
+public class NgramInitialRF {
 
     public static class Map extends Mapper<LongWritable, Text, Text, MapWritable>{
         private Text word; // emitted to be key
@@ -74,18 +75,29 @@ public class NgramInitialCount {
             }   
         }
 
+        protected IntWritable getTotal(MapWritable m){
+            Collection<Writable> counts = m.values();
+            int total = 0; 
+            for(Writable count: counts){
+                IntWritable temp = (IntWritable) count;
+                total += temp.get();
+            }
+            return new IntWritable(total);
+        }
+
         protected void cleanup(Context context) throws IOException, InterruptedException {
             Set<String> keysets = secMap.keySet();
             for(String key: keysets) {
                 MapWritable v = secMap.get(key);
+                IntWritable total = getTotal(v);
                 Text k = new Text(key);
+                v.put(new Text("*"), total);
                 context.write(k, v);
             }
         }        
     }
 
-
-    public static class Reduce extends Reducer<Text, MapWritable, Text, IntWritable> {
+    public static class Reduce extends Reducer<Text, MapWritable, Text, DoubleWritable> {
         private MapWritable finalmap;
         private Text word;
 
@@ -111,50 +123,45 @@ public class NgramInitialCount {
             }                                                                       // end of for loop
 
         }                                                                           // end of merge method
-        
-                                                                            
-        
-        /**
-         * aggregate all with the same key to reducer and add up all the MapWritable for final map
-         * @param key
-         * @param value
-         * @param context
-         * @throws IOException
-         * @throws InterruptedException
-         */
+                                                                                    
         protected void reduce(Text key, Iterable<MapWritable> value, Context context) throws IOException, InterruptedException {
+            Configuration conf = context.getConfiguration();
+            double theta = Double.parseDouble(conf.get("theta"));
+
             finalmap.clear();
             for(MapWritable v: value) {
                 merge(v);   // merge to finalmap
             }                                                                       // end of for loop
             word.set(key);
             Set<Writable> keys = finalmap.keySet();
+            IntWritable totalcount = (IntWritable) finalmap.get(new Text("*"));
             for(Writable k: keys){
-                String newstring = new String();
-                String rootword = word.toString();
-                String added = ((Text) k).toString();
-                newstring = newstring+rootword+" "+ added;
-                Text newkey = new Text(newstring);
-                IntWritable v = (IntWritable) finalmap.get(k);
-                context.write(newkey,v);
+                String root = key.toString();
+                String neighbors = ((Text) k).toString();
+                if(neighbors.equals("*")) continue;
+                String finalkey = root + " " + neighbors;
+                IntWritable count = (IntWritable) finalmap.get(k);
+                double rf_temp = (double) count.get()/totalcount.get();
+                DoubleWritable rf = new DoubleWritable(rf_temp);
+                if(rf_temp >= theta) context.write(new Text(finalkey), rf);
             }
 
-        }                                                                           // end of reduce method
-        
-        
+        }                                                                           // end of reduce method                
     }  
 
     public static void main(String[] args) throws Exception {
             Configuration conf = new Configuration();
             conf.set("N", args[2]);
+            conf.set("theta", args[3]);
             conf.set("mapreduce.textoutputformat.separator", " ");
-            Job job = new Job(conf, "NgramInitialCount");
+
+            Job job = new Job(conf, "NgramInitialRF");
             
             // Input and Output file path
             FileInputFormat.addInputPath(job, new Path(args[0]));
             FileOutputFormat.setOutputPath(job, new Path(args[1]));                                
             
-            job.setJarByClass(NgramInitialCount.class);
+            job.setJarByClass(NgramInitialRF.class);
 
             job.setOutputKeyClass(Text.class);
             job.setOutputValueClass(MapWritable.class);
